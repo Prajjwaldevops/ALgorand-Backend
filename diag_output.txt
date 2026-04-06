@@ -1,0 +1,127 @@
+﻿=== transaction_log columns ===
+  id                        uuid                 uuid                 nullable=NO
+  bounty_id                 uuid                 uuid                 nullable=NO
+  actor_id                  uuid                 uuid                 nullable=NO
+  action                    character varying    varchar              nullable=NO
+  txn_id                    character varying    varchar              nullable=YES
+  txn_note                  character varying    varchar              nullable=YES
+  amount_algo               numeric              numeric              nullable=YES
+  metadata                  jsonb                jsonb                nullable=YES
+  created_at                timestamp with time zone timestamptz          nullable=YES
+  event                     USER-DEFINED         txn_event            nullable=YES
+  ipfs_metadata_cid         character varying    varchar              nullable=YES
+  ipfs_gateway_url          text                 text                 nullable=YES
+
+=== All bounties ===
+  ID: ad73a9b8-2c1b-495c-b98f-b5a3d3266268
+    Title: kuch nahi
+    Status: in_progress | Reward: 1.00 ALGO
+    AcceptedFL: 9f954285-9b5f-4b0a-943f-e4aa1e28dc65
+    EscrowTxn: FIKAPVP2LIY3KJBMVFDKOJKCUZYDDPO7YUTYBZSXQUYILRBOD3RA
+    AppID: 0 | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: a0a59dd0-363a-4ddb-9a10-16210e735636
+    Title: refydfdysvhdvsj
+    Status: in_progress | Reward: 1.00 ALGO
+    AcceptedFL: 9f954285-9b5f-4b0a-943f-e4aa1e28dc65
+    EscrowTxn: BN7HKN677NH4NANKITVKZAVJLYN4PAIU3F35XUWDU6W6I4Z3SE4Q
+    AppID: 0 | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: c91fb654-af47-4c8c-aaa7-bd0643fb6d27
+    Title: dftgvjhnm
+    Status: in_progress | Reward: 1.00 ALGO
+    AcceptedFL: 9f954285-9b5f-4b0a-943f-e4aa1e28dc65
+    EscrowTxn: FLQOIGKCB3LJYVGCNLMYZ23TNYSORUXDCJWNLUCUEOVQLTGT56XA
+    AppID: 0 | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: 3af470ec-f35e-4c5e-bebf-7fd4486b04dc
+    Title: CREATE A WEBSITE
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: e88e6470-f4a1-4dee-86e5-178f12c71915
+
+  ID: c4f25b6b-8cbf-44e2-9c6e-7300e0ec9ea4
+    Title: yyyuiiii
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: 7fb25bbd-b9c5-48e2-b557-c2c32c609d25
+    Title: bhbkmkfghmk hngk 
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: a77f513a-b20d-4f4d-9160-bced7eec31e5
+    Title: GRUGJJSDBJBJ
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: 169a43e0-69b0-4fc1-83bb-a44865defd56
+    Title: qwertyyy
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: abdb37a3-c905-48e2-ba5f-37b055b34410
+    Title: rrtjunniibbjbjbjk
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: ec7948ad-f37b-4a10-9770-27fbc2ab2dcd
+    Title: akkjjjhhhh
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: 259b066b-022e-4be4-86ba-0fac50d5ef28
+    Title: revmatching
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: 0405e204-c904-4afc-beab-b002423f64b9
+    Title: yyuuiioopooo
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: 5660c833-cfb9-44bd-94fa-4f6cab126de9
+    Title: asdfgghh
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+  ID: bb0d7b5e-a649-47b9-aff1-4c97a3aa33d8
+    Title: trert
+    Status: open | Reward: 1.00 ALGO
+    AcceptedFL: none
+    EscrowTxn: none
+    AppID: none | Creator: 3b890f0b-0230-4af4-bd28-23ba536925c5
+
+
+=== Testing INSERT into transaction_log ===
+  Found bounty with escrow: c91fb654-af47-4c8c-aaa7-bd0643fb6d27, txn=FLQOIGKCB3LJYVGCNLMYZ23TNYSORUXDCJWNLUCUEOVQLTGT56XA
+  INSERT FAILED: pq: null value in column "action" of relation "transaction_log" violates not-null constraint
+
+=== bounty_acceptances ===
+  Acceptance: 0c82b2a1 | Bounty: ad73a9b8 | FL: 9f954285 | Status: approved | Title: kuch nahi
+  Acceptance: cefbd0ef | Bounty: a0a59dd0 | FL: 9f954285 | Status: approved | Title: refydfdysvhdvsj
+  Acceptance: 5e62d10a | Bounty: c91fb654 | FL: 9f954285 | Status: approved | Title: dftgvjhnm
+  Acceptance: 53ea09b8 | Bounty: 3af470ec | FL: 64a8bd2e | Status: pending | Title: CREATE A WEBSITE
+  Acceptance: 6bff36b9 | Bounty: c4f25b6b | FL: 9f954285 | Status: rejected | Title: yyyuiiii
+  Acceptance: ad4c6862 | Bounty: 7fb25bbd | FL: 9f954285 | Status: rejected | Title: bhbkmkfghmk hngk 
+  Acceptance: e4959bfa | Bounty: a77f513a | FL: 9f954285 | Status: rejected | Title: GRUGJJSDBJBJ
+  Acceptance: af89c764 | Bounty: 169a43e0 | FL: 9f954285 | Status: rejected | Title: qwertyyy

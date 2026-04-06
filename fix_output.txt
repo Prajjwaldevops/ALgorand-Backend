@@ -1,0 +1,37 @@
+﻿Step 1: ALTER action column to DROP NOT NULL...
+  Γ£ô action column is now nullable
+
+Step 2: Backfilling transaction_log from existing bounties...
+  Γ£ô escrow_locked for bounty c91fb654 (creator 3b890f0b)
+  Γ£ô bounty_accepted for bounty c91fb654 (freelancer 9f954285)
+  Γ£ô escrow_locked for bounty a0a59dd0 (creator 3b890f0b)
+  Γ£ô bounty_accepted for bounty a0a59dd0 (freelancer 9f954285)
+  Γ£ô escrow_locked for bounty ad73a9b8 (creator 3b890f0b)
+  Γ£ô bounty_accepted for bounty ad73a9b8 (freelancer 9f954285)
+
+  Total inserted: 6 entries
+
+  transaction_log now has 6 rows Γ£ô
+go : go: unlinkat C:\Users
+\prajj\AppData\Local\Temp\
+go-build1562011831\b001\ex
+e\fix_txn_log.exe: The 
+process cannot access the 
+file because it is being 
+used by another process.
+At line:1 char:13
++ cd scripts; go run 
+fix_txn_log.go 2>&1 | 
+Out-File -FilePath 
+..\fix_ou ...
++             
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (g  
+  o: unlinkat C:...noth   
+ er process.:String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 

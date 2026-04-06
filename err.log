@@ -1,0 +1,16 @@
+# bountyvault/internal/services
+internal\services\algorand.go:111:3: not enough arguments in call to transaction.MakeApplicationNoOpTx
+	have (uint64, [][]byte, []string, nil, nil, types.SuggestedParams)
+	want (uint64, [][]byte, []string, []uint64, []uint64, types.SuggestedParams, types.Address, []byte, types.Digest, [32]byte, types.Address)
+internal\services\algorand.go:160:3: not enough arguments in call to transaction.MakeApplicationNoOpTx
+	have (uint64, [][]byte, nil, nil, nil, types.SuggestedParams)
+	want (uint64, [][]byte, []string, []uint64, []uint64, types.SuggestedParams, types.Address, []byte, types.Digest, [32]byte, types.Address)
+internal\services\algorand.go:196:3: not enough arguments in call to transaction.MakeApplicationNoOpTx
+	have (uint64, [][]byte, []string, nil, nil, types.SuggestedParams)
+	want (uint64, [][]byte, []string, []uint64, []uint64, types.SuggestedParams, types.Address, []byte, types.Digest, [32]byte, types.Address)
+internal\services\algorand.go:233:3: not enough arguments in call to transaction.MakeApplicationNoOpTx
+	have (uint64, [][]byte, nil, nil, nil, types.SuggestedParams)
+	want (uint64, [][]byte, []string, []uint64, []uint64, types.SuggestedParams, types.Address, []byte, types.Digest, [32]byte, types.Address)
+internal\services\algorand.go:270:3: not enough arguments in call to transaction.MakeApplicationNoOpTx
+	have (uint64, [][]byte, nil, nil, nil, types.SuggestedParams)
+	want (uint64, [][]byte, []string, []uint64, []uint64, types.SuggestedParams, types.Address, []byte, types.Digest, [32]byte, types.Address)

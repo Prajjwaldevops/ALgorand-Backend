@@ -1,0 +1,1 @@
+ALTER TABLE transaction_log ALTER COLUMN action DROP NOT NULL;
