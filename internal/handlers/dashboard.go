@@ -342,8 +342,8 @@ func (h *DashboardHandler) GetMyDisputes(c *gin.Context) {
 		       d.evidence_ipfs_cid, d.dao_vote_deadline, d.auto_refund_after,
 		       b.title as bounty_title, b.reward_algo,
 		       p.username as initiated_by_username,
-		       (SELECT COUNT(*) FILTER(WHERE vote='approve') FROM dao_votes WHERE dispute_id = d.id) as approve_votes,
-		       (SELECT COUNT(*) FILTER(WHERE vote='reject') FROM dao_votes WHERE dispute_id = d.id) as reject_votes,
+		       (SELECT COUNT(*) FILTER(WHERE vote::text='creator') FROM dao_votes WHERE dispute_id = d.id) as approve_votes,
+		       (SELECT COUNT(*) FILTER(WHERE vote::text='freelancer') FROM dao_votes WHERE dispute_id = d.id) as reject_votes,
 		       (SELECT COUNT(*) FROM dao_votes WHERE dispute_id = d.id) as total_votes
 		FROM disputes d
 		JOIN bounties b ON d.bounty_id = b.id

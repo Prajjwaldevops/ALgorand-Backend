@@ -59,7 +59,7 @@ func main() {
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(cfg)
 	bountyHandler := handlers.NewBountyHandler(cfg, algoSvc, ipfsSvc, r2Svc)
-	daoHandler := handlers.NewDAOHandler(algoSvc, ipfsSvc)
+	daoHandler := handlers.NewDAOHandler(cfg, algoSvc, ipfsSvc)
 	leaderboardHandler := handlers.NewLeaderboardHandler()
 	dashboardHandler := handlers.NewDashboardHandler()
 	adminHandler := handlers.NewAdminHandler(cfg)
@@ -159,17 +159,21 @@ func main() {
 	// --- Categories (public) ---
 	api.GET("/categories", bountyHandler.ListCategories)
 
-	// --- DAO Voting (v3.1) ---
+	// --- DAO Voting (v3.1 + v3.6 voting compliance) ---
 	dao := api.Group("/dao")
 	{
 		dao.GET("/disputes", daoHandler.ListActiveDisputes)
+		dao.GET("/disputes/:id", daoHandler.GetDisputeDetail)
 		dao.GET("/disputes/:id/votes", daoHandler.GetDisputeVotes)
 	}
 	daoProtected := api.Group("/dao")
 	daoProtected.Use(middleware.ClerkAuthMiddleware())
 	{
-		daoProtected.POST("/disputes/:id/vote", daoHandler.CastVote)       // v3.1: per-dispute vote
-		daoProtected.POST("/disputes/:id/finalize", daoHandler.FinalizeVote) // v3.1: permissionless
+		daoProtected.POST("/disputes/:id/build-vote-txn", daoHandler.BuildVoteTxn)       // v3.6: build Payment+AppCall group
+		daoProtected.POST("/disputes/:id/vote", daoHandler.CastVote)                     // v3.1: submit signed vote txns
+		daoProtected.POST("/disputes/:id/build-finalize-txn", daoHandler.BuildFinalizeTxn) // v3.6: build resolve_dao_dispute()
+		daoProtected.POST("/disputes/:id/finalize", daoHandler.FinalizeVote)              // v3.1: submit signed finalize txn
+		daoProtected.GET("/voting-status", daoHandler.GetVotingStatus)                    // v3.6: voting compliance
 	}
 
 	// --- Leaderboard & Stats (public) ---

@@ -1,0 +1,7 @@
+﻿.next/dev/types/validator.ts(143,39): error TS2307: Cannot find module '../../../src/app/api/auth/[...all]/route.js' or its corresponding type declarations.
+.next/types/validator.ts(143,39): error TS2307: Cannot find module '../../src/app/api/auth/[...all]/route.js' or its corresponding type declarations.
+src/app/auth/reset-password/page.tsx(4,28): error TS2307: Cannot find module '@/lib/auth-client' or its corresponding type declarations.
+src/app/bounties/[id]/page.tsx(205,38): error TS2339: Property 'worker' does not exist on type 'Submission'.
+src/app/bounties/[id]/page.tsx(205,78): error TS2339: Property 'worker_id' does not exist on type 'Submission'.
+src/app/bounties/[id]/page.tsx(211,38): error TS2339: Property 'worker' does not exist on type 'Submission'.
+src/context/WalletContext.tsx(46,48): error TS2554: Expected 1 arguments, but got 2.

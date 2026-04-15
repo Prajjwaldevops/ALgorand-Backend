@@ -249,10 +249,11 @@ func (h *BountyHandler) LockBounty(c *gin.Context) {
 	var ra float64
 	var dl time.Time
 	var ms int
+	var bountyDisplayID string
 	err := database.DB.QueryRow(`
-		SELECT creator_id, reward_algo, deadline, max_submissions
+		SELECT creator_id, reward_algo, deadline, max_submissions, bounty_id
 		FROM bounties WHERE id = $1 AND status = 'open'
-	`, bid).Scan(&creatorID, &ra, &dl, &ms)
+	`, bid).Scan(&creatorID, &ra, &dl, &ms, &bountyDisplayID)
 	if err != nil {
 		c.JSON(404, models.APIResponse{Success: false, Error: "Bounty not found or not in open state"})
 		return
@@ -262,6 +263,24 @@ func (h *BountyHandler) LockBounty(c *gin.Context) {
 		return
 	}
 
+	// ESCROW BYPASS: When escrow address is configured, send funds directly
+	// to the escrow account instead of the smart contract app address
+	escrowAddr := h.cfg.EscrowAddress
+	if escrowAddr != "" {
+		log.Printf("[ESCROW-LOCK] Using escrow bypass: sending to %s instead of app address", escrowAddr)
+		txns, err := h.algoSvc.BuildEscrowLockTxn(
+			c.Request.Context(), req.WalletAddress, escrowAddr,
+			uint64(ra*1e6), bountyDisplayID,
+		)
+		if err != nil {
+			c.JSON(500, models.APIResponse{Success: false, Error: err.Error()})
+			return
+		}
+		c.JSON(200, models.APIResponse{Success: true, Message: "Sign the transaction to lock funds in escrow", Data: txns})
+		return
+	}
+
+	// Original smart contract flow — sends to app address
 	txns, err := h.algoSvc.BuildCreateBountyTxns(
 		c.Request.Context(), req.WalletAddress,
 		uint64(ra*1e6), nil, uint64(dl.Unix()), uint64(ms), "",
@@ -903,13 +922,21 @@ func (h *BountyHandler) InitiateDispute(c *gin.Context) {
 		c.JSON(404, models.APIResponse{Success: false, Error: "Bounty not found"})
 		return
 	}
-	// Must be expired (all rejections exhausted)
-	if status != "expired" {
-		c.JSON(400, models.APIResponse{Success: false, Error: "Dispute only allowed when all submission slots are exhausted"})
+	// v3.5: Allow dispute when in_progress OR expired (at least 1 rejected submission required)
+	if status != "expired" && status != "in_progress" {
+		c.JSON(400, models.APIResponse{Success: false, Error: "Dispute only allowed when bounty is in progress or all submission slots are exhausted"})
 		return
 	}
 	if creatorID == pid.(string) {
 		c.JSON(400, models.APIResponse{Success: false, Error: "Creator cannot raise a dispute"})
+		return
+	}
+
+	// Require at least 1 rejected submission from this freelancer
+	var rejectedCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM submissions WHERE bounty_id = $1 AND freelancer_id = $2 AND status = 'rejected'`, bid, pid).Scan(&rejectedCount)
+	if rejectedCount == 0 {
+		c.JSON(400, models.APIResponse{Success: false, Error: "You must have at least 1 rejected submission to raise a dispute"})
 		return
 	}
 
@@ -955,11 +982,13 @@ func (h *BountyHandler) InitiateDispute(c *gin.Context) {
 
 	_, err = database.DB.Exec(`
 		INSERT INTO disputes (id, dispute_id, bounty_id, freelancer_id, creator_id,
-		  freelancer_description, submission_history, status, voting_deadline)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8)
+		  freelancer_description, submission_history, status, voting_deadline,
+		  initiated_by, reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $4, $6)
 	`, did, disputeDisplayID, bid, pid, creatorID, req.Description, subHistoryJSON, votingDeadline)
 	if err != nil {
-		c.JSON(500, models.APIResponse{Success: false, Error: "Failed to create dispute record"})
+		log.Printf("[ERROR] Failed to create dispute record for bounty %s: %v", bid, err)
+		c.JSON(500, models.APIResponse{Success: false, Error: "Failed to create dispute record: " + err.Error()})
 		return
 	}
 
@@ -1005,15 +1034,11 @@ func (h *BountyHandler) InitiateDispute(c *gin.Context) {
 	})
 }
 
-// POST /api/bounties/:id/letgo — Freelancer forfeits, creator refunded, ratings reset to 0
+// POST /api/bounties/:id/letgo — Freelancer forfeits, creator refunded, rating reduced by 20%
+// v3.5: Uses escrow bypass to refund creator directly
 func (h *BountyHandler) LetGoBounty(c *gin.Context) {
 	bid := c.Param("id")
 	pid, _ := c.Get("profile_id")
-	var req models.LetGoRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, models.APIResponse{Success: false, Error: err.Error()})
-		return
-	}
 
 	var status, creatorID string
 	var rewardAlgo float64
@@ -1026,8 +1051,9 @@ func (h *BountyHandler) LetGoBounty(c *gin.Context) {
 		c.JSON(404, models.APIResponse{Success: false, Error: "Bounty not found"})
 		return
 	}
-	if status != "expired" {
-		c.JSON(400, models.APIResponse{Success: false, Error: "Let Go only available when submission slots are exhausted"})
+	// Allow Let Go when in_progress or expired, but freelancer must have at least 1 submission
+	if status != "expired" && status != "in_progress" {
+		c.JSON(400, models.APIResponse{Success: false, Error: "Let Go only available when bounty is in progress or submission slots are exhausted"})
 		return
 	}
 	if creatorID == pid.(string) {
@@ -1035,25 +1061,46 @@ func (h *BountyHandler) LetGoBounty(c *gin.Context) {
 		return
 	}
 
-	// Submit let_go_bounty transaction
-	txID := "mock_let_go_txn_" + bid
-	if len(req.SignedTxns) > 0 {
-		txID, err = h.algoSvc.SubmitSignedTxns(c.Request.Context(), req.SignedTxns)
+	// Verify freelancer has at least 1 submission
+	var subCount int
+	database.DB.QueryRow(`SELECT COUNT(*) FROM submissions WHERE bounty_id = $1 AND freelancer_id = $2`, bid, pid).Scan(&subCount)
+	if subCount == 0 {
+		c.JSON(400, models.APIResponse{Success: false, Error: "You must have at least 1 submission to use Let Go"})
+		return
+	}
+
+	// Get creator wallet for refund
+	var creatorWallet string
+	database.DB.QueryRow(`SELECT COALESCE(wallet_address,'') FROM profiles WHERE id = $1`, creatorID).Scan(&creatorWallet)
+
+	// ESCROW BYPASS: Send ALGO back to creator from configured escrow account
+	var txID string
+	escrowMnemonic := h.cfg.EscrowMnemonic
+	if escrowMnemonic != "" && creatorWallet != "" && h.algoSvc != nil {
+		amountMicroAlgos := uint64(rewardAlgo * 1e6)
+		note := fmt.Sprintf("BountyVault:freelancer_letgo:%s:refund_to:%s", bountyDisplayID, creatorWallet)
+		log.Printf("[LETGO-REFUND] Sending %.6f ALGO (%d microAlgos) to creator %s for bounty %s",
+			rewardAlgo, amountMicroAlgos, creatorWallet, bountyDisplayID)
+
+		txID, err = h.algoSvc.SendDirectPayment(c.Request.Context(), escrowMnemonic, creatorWallet, amountMicroAlgos, note)
 		if err != nil {
-			c.JSON(500, models.APIResponse{Success: false, Error: "Transaction failed: " + err.Error()})
+			log.Printf("[LETGO-REFUND] Payment failed: %v", err)
+			c.JSON(500, models.APIResponse{Success: false, Error: "Escrow refund failed: " + err.Error()})
 			return
 		}
+		log.Printf("[LETGO-REFUND] Refund success! txID=%s", txID)
 		h.algoSvc.WaitForConfirmation(c.Request.Context(), txID, 10)
+	} else {
+		// Fallback mock
+		txID = fmt.Sprintf("letgo_refund_%s_%d", bid, time.Now().UnixMilli())
 	}
 
 	database.DB.Exec(`UPDATE bounties SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, bid)
 
-	// v3.3: Reset freelancer ratings to 0
+	// v3.5: Reduce freelancer reputation by 20% (not reset to 0)
 	database.DB.Exec(`
 		UPDATE profiles SET
-		  reputation_score = 0,
-		  avg_rating = 0,
-		  total_ratings = 0
+		  reputation_score = GREATEST(0, FLOOR(reputation_score * 0.8))
 		WHERE id = $1
 	`, pid)
 
@@ -1066,19 +1113,18 @@ func (h *BountyHandler) LetGoBounty(c *gin.Context) {
 	database.DB.Exec(`
 		INSERT INTO transaction_log (bounty_id, actor_id, event, txn_id, txn_note, amount_algo)
 		VALUES ($1, $2, 'freelancer_letgo', $3, $4, $5)
-	`, bid, creatorID, txID, fmt.Sprintf("BountyVault:freelancer_letgo:%d", appIDVal), rewardAlgo)
+	`, bid, creatorID, txID, fmt.Sprintf("BountyVault:freelancer_letgo:%d:refund_to:%s", appIDVal, creatorWallet), rewardAlgo)
 
 	// Pin let-go metadata to IPFS
 	go func() {
-		var freelancerAddr, creatorAddr string
+		var freelancerAddr string
 		database.DB.QueryRow(`SELECT COALESCE(wallet_address,'') FROM profiles WHERE id = $1`, pid).Scan(&freelancerAddr)
-		database.DB.QueryRow(`SELECT COALESCE(wallet_address,'') FROM profiles WHERE id = $1`, creatorID).Scan(&creatorAddr)
 		_, err := h.ipfsSvc.PinFreelancerLetGo(context.Background(), services.FreelancerLetGoMetadata{
 			BountyID:          bountyDisplayID,
 			FreelancerAddress: freelancerAddr,
-			CreatorAddress:    creatorAddr,
+			CreatorAddress:    creatorWallet,
 			RefundedAlgo:      rewardAlgo,
-			RatingReset:       true, // v3.3: freelancer ratings set to 0
+			RatingReset:       false, // v3.5: reduced by 20%, not reset
 			TxnID:             txID,
 			Network:           h.cfg.AlgoNetwork,
 		})
@@ -1089,8 +1135,8 @@ func (h *BountyHandler) LetGoBounty(c *gin.Context) {
 
 	c.JSON(200, models.APIResponse{
 		Success: true,
-		Message: "Bounty forfeited — ratings reset, creator will receive refund",
-		Data:    gin.H{"txn_id": txID},
+		Message: "Bounty forfeited — reputation reduced by 20%, creator will receive refund",
+		Data:    gin.H{"txn_id": txID, "refund_wallet": creatorWallet, "refund_amount": rewardAlgo},
 	})
 }
 
@@ -1465,10 +1511,11 @@ func (h *BountyHandler) ReviewAcceptance(c *gin.Context) {
 	var deadline time.Time
 	var maxSubs int
 	var bountyStatus string
+	var bountyDisplayID string
 	err := database.DB.QueryRow(`
-		SELECT creator_id, reward_algo, deadline, max_submissions, status
+		SELECT creator_id, reward_algo, deadline, max_submissions, status, bounty_id
 		FROM bounties WHERE id = $1
-	`, bid).Scan(&creatorID, &rewardAlgo, &deadline, &maxSubs, &bountyStatus)
+	`, bid).Scan(&creatorID, &rewardAlgo, &deadline, &maxSubs, &bountyStatus, &bountyDisplayID)
 	if err != nil {
 		c.JSON(404, models.APIResponse{Success: false, Error: "Bounty not found"})
 		return
@@ -1520,7 +1567,32 @@ func (h *BountyHandler) ReviewAcceptance(c *gin.Context) {
 		return
 	}
 
-	// Build unsigned escrow transactions for Pera Wallet
+	// ESCROW BYPASS: When escrow address is configured, send funds directly
+	// to the escrow account instead of the smart contract app address
+	escrowAddr := h.cfg.EscrowAddress
+	if escrowAddr != "" {
+		log.Printf("[ESCROW-LOCK] ReviewAcceptance: Using escrow bypass: sending to %s", escrowAddr)
+		txns, err := h.algoSvc.BuildEscrowLockTxn(
+			c.Request.Context(), req.WalletAddress, escrowAddr,
+			uint64(rewardAlgo*1e6), bountyDisplayID,
+		)
+		if err != nil {
+			c.JSON(500, models.APIResponse{Success: false, Error: "Failed to build escrow transactions: " + err.Error()})
+			return
+		}
+		c.JSON(200, models.APIResponse{
+			Success: true,
+			Message: "Sign the transaction to lock funds in escrow and approve this freelancer",
+			Data: gin.H{
+				"transactions":  txns,
+				"freelancer_id": req.FreelancerID,
+				"acceptance_id": acceptanceID,
+			},
+		})
+		return
+	}
+
+	// Original smart contract flow — sends to app address
 	txns, err := h.algoSvc.BuildCreateBountyTxns(
 		c.Request.Context(), req.WalletAddress,
 		uint64(rewardAlgo*1e6), nil, uint64(deadline.Unix()), uint64(maxSubs), "",

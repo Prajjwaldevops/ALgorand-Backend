@@ -516,6 +516,136 @@ func (s *AlgorandService) BuildRefundExpiredTxn(
 	}, nil
 }
 
+// BuildVotePaymentTxn builds an unsigned payment transaction for DAO voting:
+//   Single Payment: voter → escrow address (0.001 ALGO = 1000 microAlgos gas fee)
+//
+// ESCROW BYPASS MODE: We skip the cast_dao_vote() app call because disputes
+// are managed off-chain (database). The on-chain bounty status is never set to
+// DISPUTED, so the smart contract assertion (status == 3) always fails.
+// Once per-bounty contracts with on-chain disputes are enabled, re-add the app call.
+func (s *AlgorandService) BuildVotePaymentTxn(
+	ctx context.Context,
+	voterAddr string,
+	escrowAddr string,
+	voteFor uint64, // 1=creator, 2=freelancer (recorded in DB)
+	appID uint64,   // reserved for future per-bounty contract use
+) (*UnsignedTxnResult, error) {
+	params, err := s.GetSuggestedParams(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Single payment: voter → escrow, 0.001 ALGO gas fee
+	amountMicroAlgos := uint64(1000) // 0.001 ALGO
+	note := []byte("BountyVault:dao_vote_gas_fee")
+
+	payTxn, err := transaction.MakePaymentTxn(
+		voterAddr,
+		escrowAddr,
+		amountMicroAlgos,
+		note,
+		"",
+		params,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create vote payment txn: %w", err)
+	}
+
+	txnBytes := encodeMsgpack(payTxn)
+
+	return &UnsignedTxnResult{
+		Transactions: []string{
+			base64.StdEncoding.EncodeToString(txnBytes),
+		},
+		Message: "Sign this transaction to cast your DAO vote (0.001 ALGO gas fee to escrow)",
+	}, nil
+}
+
+// BuildFinalizeDisputeTxn builds an unsigned transaction to call resolve_dao_dispute()
+// on the smart contract. This is permissionless — anyone can call after dao_deadline.
+// The contract itself handles the inner payment to the winner.
+func (s *AlgorandService) BuildFinalizeDisputeTxn(
+	ctx context.Context,
+	senderAddr string,
+	appID uint64, // per-bounty contract app ID (0 = use default)
+) (*UnsignedTxnResult, error) {
+	params, err := s.GetSuggestedParams(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	targetAppID := appID
+	if targetAppID == 0 {
+		targetAppID = s.appID
+	}
+
+	// ABI method selector: resolve_dao_dispute()string
+	methodSelector := []byte{0xef, 0x86, 0x29, 0xb1}
+	appArgs := [][]byte{methodSelector}
+
+	sender, err := types.DecodeAddress(senderAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid sender address: %w", err)
+	}
+
+	// Extra fee for inner payment (contract pays freelancer/creator)
+	params.Fee = 2000
+	params.FlatFee = true
+
+	appCallTxn, err := transaction.MakeApplicationNoOpTx(
+		targetAppID, appArgs, nil, nil, nil,
+		params, sender, nil, types.Digest{}, [32]byte{}, types.Address{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resolve dispute txn: %w", err)
+	}
+
+	return &UnsignedTxnResult{
+		Transactions: []string{base64.StdEncoding.EncodeToString(encodeMsgpack(appCallTxn))},
+		Message:      "Sign this transaction to finalize the DAO dispute (contract releases funds to winner)",
+	}, nil
+}
+
+
+// BuildEscrowLockTxn builds a simple payment transaction to the escrow address.
+// Used when escrow bypass mode is active — funds go directly to the escrow account
+// instead of the smart contract application address.
+func (s *AlgorandService) BuildEscrowLockTxn(
+	ctx context.Context,
+	creatorAddr string,
+	escrowAddr string,
+	rewardMicroAlgos uint64,
+	bountyID string,
+) (*UnsignedTxnResult, error) {
+	params, err := s.GetSuggestedParams(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	note := []byte(fmt.Sprintf("BountyVault:escrow_lock:%s", bountyID))
+
+	payTxn, err := transaction.MakePaymentTxn(
+		creatorAddr,
+		escrowAddr,
+		rewardMicroAlgos,
+		note,
+		"",
+		params,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create escrow lock payment txn: %w", err)
+	}
+
+	txnBytes := encodeMsgpack(payTxn)
+
+	return &UnsignedTxnResult{
+		Transactions: []string{
+			base64.StdEncoding.EncodeToString(txnBytes),
+		},
+		Message: "Sign this transaction to lock funds in escrow",
+	}, nil
+}
+
 // SendDirectPayment sends ALGO directly from the escrow account to a recipient.
 // This bypasses the smart contract — used as a temporary workaround for payouts.
 func (s *AlgorandService) SendDirectPayment(
