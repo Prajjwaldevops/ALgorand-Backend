@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -81,9 +82,20 @@ func main() {
 	r.Use(middleware.MaxBodySize(10 << 20)) // 10MB max
 	r.Use(middleware.RateLimitMiddleware(cfg.RateLimitRPS, cfg.RateLimitBurst))
 
-	// CORS
+	// CORS — allow configured origins + any *.vercel.app preview deployments
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.AllowedOrigins,
+		AllowOriginFunc: func(origin string) bool {
+			for _, o := range cfg.AllowedOrigins {
+				if o == origin {
+					return true
+				}
+			}
+			// Allow any Vercel preview/production deployment
+			if strings.HasSuffix(origin, ".vercel.app") {
+				return true
+			}
+			return false
+		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID"},
 		ExposeHeaders:    []string{"Content-Length", "X-Request-ID"},
