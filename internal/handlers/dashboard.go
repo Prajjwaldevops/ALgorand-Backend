@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"time"
 
 	"bountyvault/internal/database"
@@ -237,16 +238,23 @@ func (h *DashboardHandler) GetMySubmissions(c *gin.Context) {
 func (h *DashboardHandler) GetWorkingBounties(c *gin.Context) {
 	pid, _ := c.Get("profile_id")
 
+	// Use a broader query that checks multiple conditions:
+	// 1. accepted_freelancer_id = current user (v3.3 acceptance flow)
+	// 2. Has an approved acceptance record (v3.2 flow)
+	// 3. Has submitted work to this bounty (legacy/fallback)
 	rows, err := database.DB.Query(`
-		SELECT b.id, b.title, b.description, b.reward_algo, b.deadline, b.status,
-		       b.max_submissions, b.submissions_remaining, b.tags, b.created_at,
+		SELECT DISTINCT ON (b.id)
+		       b.id, b.title, b.description, b.reward_algo, b.deadline, b.status,
+		       b.max_submissions,
+		       COALESCE(b.max_submissions - (SELECT COUNT(*) FROM submissions sub2 WHERE sub2.bounty_id = b.id), b.max_submissions) as subs_remaining,
+		       b.tags, b.created_at,
 		       COALESCE(
 		         (SELECT s.status FROM submissions s
 		          WHERE s.bounty_id = b.id AND s.freelancer_id = $1
 		          ORDER BY s.created_at DESC LIMIT 1), 'none'
 		       ) as latest_sub_status,
 		       COALESCE(
-		         (SELECT s.id FROM submissions s
+		         (SELECT s.id::text FROM submissions s
 		          WHERE s.bounty_id = b.id AND s.freelancer_id = $1
 		          ORDER BY s.created_at DESC LIMIT 1), ''
 		       ) as latest_sub_id,
@@ -264,12 +272,26 @@ func (h *DashboardHandler) GetWorkingBounties(c *gin.Context) {
 		       p.username as creator_username
 		FROM bounties b
 		JOIN profiles p ON b.creator_id = p.id
-		WHERE b.accepted_freelancer_id = $1
-		  AND b.status IN ('in_progress', 'expired')
-		ORDER BY b.updated_at DESC
+		WHERE b.status IN ('open', 'in_progress', 'submitted', 'expired', 'accepted')
+		  AND (
+		    -- Condition 1: accepted_freelancer_id matches (v3.3+)
+		    b.accepted_freelancer_id = $1
+		    -- Condition 2: has approved acceptance record (v3.2+)
+		    OR EXISTS (
+		      SELECT 1 FROM bounty_acceptances ba
+		      WHERE ba.bounty_id = b.id AND ba.freelancer_id = $1 AND ba.status = 'approved'
+		    )
+		    -- Condition 3: has submitted work (legacy fallback)
+		    OR EXISTS (
+		      SELECT 1 FROM submissions s
+		      WHERE s.bounty_id = b.id AND s.freelancer_id = $1
+		    )
+		  )
+		ORDER BY b.id, b.updated_at DESC
 		LIMIT 20
 	`, pid)
 	if err != nil {
+		log.Printf("[ERROR] GetWorkingBounties query failed: %v", err)
 		c.JSON(500, models.APIResponse{Success: false, Error: "Failed to fetch working bounties"})
 		return
 	}
@@ -284,15 +306,19 @@ func (h *DashboardHandler) GetWorkingBounties(c *gin.Context) {
 		var maxSubs, subsRemaining, subCount int
 		var tags []string
 
-		rows.Scan(&id, &title, &desc, &reward, &deadline, &bStatus,
+		err := rows.Scan(&id, &title, &desc, &reward, &deadline, &bStatus,
 			&maxSubs, &subsRemaining, pq.Array(&tags), &createdAt,
 			&latestSubStatus, &latestSubID, &latestSubAt,
 			&lastRejFeedback, &subCount, &creatorUsername)
+		if err != nil {
+			log.Printf("[ERROR] GetWorkingBounties row scan failed: %v", err)
+			continue
+		}
 
 		// Has submitted at least once?
 		hasSubmitted := latestSubStatus != "none"
 		// Can submit if: bounty in_progress, no pending submission, and remaining slots > 0
-		canSubmit := bStatus == "in_progress" &&
+		canSubmit := (bStatus == "in_progress" || bStatus == "accepted") &&
 			(latestSubStatus == "none" || latestSubStatus == "rejected") &&
 			subsRemaining > 0
 		// Can resubmit if latest was rejected and slots remain
